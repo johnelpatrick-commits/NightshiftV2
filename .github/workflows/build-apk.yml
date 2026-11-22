@@ -1,0 +1,31 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  apk:
+    runs-on: ubuntu-22.04
+    container: barichello/godot-ci:4.2.2
+    env:
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup templates and debug keystore
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates build
+          cp -r /root/.local/share/godot/export_templates/* ~/.local/share/godot/export_templates/ 2>/dev/null || true
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore /root/debug.keystore -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deploy
+      - name: Import and export APK
+        run: |
+          godot --headless --import || true
+          godot --headless --export-debug "Android" build/NightShiftDorm.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NightShiftDorm-apk
+          path: build/NightShiftDorm.apk
