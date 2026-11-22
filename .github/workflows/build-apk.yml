@@ -8,35 +8,28 @@ jobs:
   apk:
     runs-on: ubuntu-22.04
     container: barichello/godot-ci:4.2.2
-    env:
-      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/debug.keystore
-      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
-      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
     steps:
       - uses: actions/checkout@v4
-      - name: Setup templates, keystore and Godot Android settings
+      - name: Setup Godot Android
         run: |
           mkdir -p ~/.local/share/godot/export_templates ~/.config/godot build
-          cp -r /root/.local/share/godot/export_templates/* ~/.local/share/godot/export_templates/ 2>/dev/null || true
+          cp -r /root/.local/share/godot/export_templates/* ~/.local/share/godot/export_templates/ || true
           rm -f /root/debug.keystore
           keytool -keyalg RSA -keysize 2048 -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999
           JAVA_PATH=$(dirname $(dirname $(readlink -f $(which keytool))))
           ANDROID_PATH=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}
-          echo "JAVA_PATH=$JAVA_PATH"
-          echo "ANDROID_PATH=$ANDROID_PATH"
-          SETTINGS=$HOME/.config/godot/editor_settings-4.tres
-          cp -n /root/.config/godot/editor_settings-4.tres $SETTINGS 2>/dev/null || true
-          if [ ! -f $SETTINGS ]; then printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > $SETTINGS; fi
-          sed -i '/export\/android\/java_sdk_path/d' $SETTINGS
-          sed -i '/export\/android\/android_sdk_path/d' $SETTINGS
-          sed -i "/^\[resource\]/a export/android/java_sdk_path = \"$JAVA_PATH\"" $SETTINGS
-          sed -i "/^\[resource\]/a export/android/android_sdk_path = \"$ANDROID_PATH\"" $SETTINGS
-          cat $SETTINGS | head -20
-      - name: Import and export APK
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "/root/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\nexport/android/force_system_user = false\nexport/android/shutdown_adb_on_exit = true\n' "$JAVA_PATH" "$ANDROID_PATH" > ~/.config/godot/editor_settings-4.tres
+          echo "== settings =="; cat ~/.config/godot/editor_settings-4.tres
+          echo "== sdk =="; ls "$ANDROID_PATH" "$ANDROID_PATH/build-tools" "$ANDROID_PATH/platform-tools" | head -30
+          echo "== templates =="; ls ~/.local/share/godot/export_templates/*
+          echo "== java =="; ls "$JAVA_PATH/bin" | head -8
+      - name: Export APK
         run: |
           godot --headless --import || true
           godot --headless --export-debug "Android" build/NightShiftDorm.apk
+          ls -la build
       - uses: actions/upload-artifact@v4
         with:
           name: NightShiftDorm-apk
           path: build/NightShiftDorm.apk
+          if-no-files-found: error
